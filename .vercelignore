@@ -1,0 +1,15 @@
+# Local metadata/cache
+.vercel/
+__pycache__/
+*.pyc
+
+# Local test/input artifacts
+*.pdf
+*.html
+
+# Local-only scripts (not needed by deployed app)
+gate_da_web.py
+gate_marks_calculator.py
+
+# Misc
+.DS_Store

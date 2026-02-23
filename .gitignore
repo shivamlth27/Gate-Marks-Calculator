@@ -1,0 +1,9 @@
+.vercel
+.env*.local
+
+# local/env/build files
+.env*
+!.env.example
+__pycache__/
+*.pyc
+.DS_Store
