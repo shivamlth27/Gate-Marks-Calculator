@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import csv
 import io
+import ipaddress
 import json
 import os
 import re
 import ssl
+import socket
 import sys
 from pathlib import Path
 from html import escape
@@ -51,6 +53,11 @@ KV_REST_API_URL = os.getenv("KV_REST_API_URL", "").strip().rstrip("/")
 KV_REST_API_TOKEN = os.getenv("KV_REST_API_TOKEN", "").strip()
 USE_VERCEL_KV = bool(KV_REST_API_URL and KV_REST_API_TOKEN)
 TELEGRAM_GROUP_URL = os.getenv("TELEGRAM_GROUP_URL", "").strip()
+RESPONSE_URL_ALLOWED_HOSTS = {
+    h.strip().lower()
+    for h in os.getenv("RESPONSE_URL_ALLOWED_HOSTS", "cdn.digialm.com").split(",")
+    if h.strip()
+}
 
 KV_KEY_RANKS = "gate_da:ranks"
 KV_KEY_VISITS = "gate_da:visits"
@@ -97,10 +104,51 @@ def parse_candidate_meta(html_text: str) -> dict[str, str]:
     }
 
 
+def _is_public_ip_address(addr: str) -> bool:
+    ip = ipaddress.ip_address(addr)
+    return not (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )
+
+
+def _validate_response_url_target(parsed) -> None:
+    host = (parsed.hostname or "").strip().lower().rstrip(".")
+    if not host:
+        raise ValueError("Response URL must include a valid hostname")
+
+    if parsed.username or parsed.password:
+        raise ValueError("Credentials in response URL are not allowed")
+
+    if RESPONSE_URL_ALLOWED_HOSTS and host not in RESPONSE_URL_ALLOWED_HOSTS:
+        allowed = ", ".join(sorted(RESPONSE_URL_ALLOWED_HOSTS))
+        raise ValueError(f"Only allowed host(s): {allowed}")
+
+    try:
+        addr_info = socket.getaddrinfo(host, parsed.port or 443, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as exc:
+        raise RuntimeError(f"Unable to resolve URL host: {exc}") from exc
+
+    addresses = {info[4][0] for info in addr_info if info and info[4]}
+    if not addresses:
+        raise RuntimeError("Unable to resolve URL host")
+
+    for addr in addresses:
+        if not _is_public_ip_address(addr):
+            raise ValueError("Response URL resolves to a non-public IP address")
+
+
+
 def fetch_html_from_url(response_url: str) -> str:
     parsed = urlparse(response_url)
     if parsed.scheme not in {"http", "https"}:
         raise ValueError("Response URL must start with http:// or https://")
+
+    _validate_response_url_target(parsed)
 
     req = Request(
         response_url,

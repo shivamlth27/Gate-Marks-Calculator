@@ -35,7 +35,7 @@ python3 -m pip install -r requirements.txt
 PYTHONPATH="$PWD" flask --app api/index.py run --debug --port 5001
 ```
 
-Open: `http://127.0.0.1:5001`
+Open: `http://127.0.0.1:5000`
 
 Primary URL:
 
