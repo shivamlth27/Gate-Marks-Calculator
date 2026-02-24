@@ -47,15 +47,6 @@ app = Flask(__name__)
 load_env_file(PROJECT_ROOT / ".env.local")
 load_env_file(PROJECT_ROOT / ".env")
 
-SHARED_RANK_DB_URL = os.getenv(
-    "SHARED_RANK_DB_URL",
-    "https://jsonblob.com/api/jsonBlob/019c850d-3527-7e57-aac3-07b96b1e2d18",
-)
-SHARED_VISIT_DB_URL = os.getenv(
-    "SHARED_VISIT_DB_URL",
-    "https://jsonblob.com/api/jsonBlob/019c851e-35bd-775d-bc30-e62b8da0b436",
-)
-
 KV_REST_API_URL = os.getenv("KV_REST_API_URL", "").strip().rstrip("/")
 KV_REST_API_TOKEN = os.getenv("KV_REST_API_TOKEN", "").strip()
 USE_VERCEL_KV = bool(KV_REST_API_URL and KV_REST_API_TOKEN)
@@ -191,7 +182,7 @@ def load_shared_rank_db() -> list[dict[str, object]]:
             rows.sort(key=lambda x: safe_float(x.get("marks", 0)), reverse=True)
             return rows
         except Exception:
-            pass
+            return []
 
     if USE_VERCEL_KV:
         try:
@@ -206,29 +197,9 @@ def load_shared_rank_db() -> list[dict[str, object]]:
                 rows.sort(key=lambda x: safe_float(x.get("marks", 0)), reverse=True)
                 return rows
         except Exception:
-            pass
-
-    req = Request(
-        SHARED_RANK_DB_URL,
-        headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
-    )
-    try:
-        raw = _download_request(req, timeout=12)
-        data = json.loads(raw.decode("utf-8", errors="ignore"))
-        if not isinstance(data, list):
             return []
-        rows: list[dict[str, object]] = []
-        for item in data:
-            if not isinstance(item, dict):
-                continue
-            cid = str(item.get("id", "")).strip()
-            marks = safe_float(item.get("marks", 0))
-            if cid:
-                rows.append({"id": cid, "marks": marks})
-        rows.sort(key=lambda x: safe_float(x.get("marks", 0)), reverse=True)
-        return rows
-    except Exception:
-        return []
+
+    return []
 
 
 def save_shared_rank_db(rows: list[dict[str, object]]) -> None:
@@ -254,14 +225,7 @@ def save_shared_rank_db(rows: list[dict[str, object]]) -> None:
             _kv_request("hset", KV_KEY_RANKS, cid, f"{marks:.6f}")
         return
 
-    payload = json.dumps(rows, separators=(",", ":")).encode("utf-8")
-    req = Request(
-        SHARED_RANK_DB_URL,
-        data=payload,
-        method="PUT",
-        headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"},
-    )
-    _download_request(req, timeout=12)
+    raise RuntimeError("Storage unavailable: configure REDIS_URL or KV_REST_API_URL/KV_REST_API_TOKEN")
 
 
 def upsert_shared_rank(candidate_id: str, marks: float) -> list[dict[str, object]]:
@@ -274,30 +238,16 @@ def upsert_shared_rank(candidate_id: str, marks: float) -> list[dict[str, object
             redis_client.hset(REDIS_KEY_RANKS, candidate_id, f"{safe_float(marks):.6f}")
             return load_shared_rank_db()
         except Exception:
-            pass
+            return load_shared_rank_db()
 
     if USE_VERCEL_KV:
         try:
             _kv_request("hset", KV_KEY_RANKS, candidate_id, f"{safe_float(marks):.6f}")
             return load_shared_rank_db()
         except Exception:
-            pass
+            return load_shared_rank_db()
 
-    rows = load_shared_rank_db()
-    found = False
-    for row in rows:
-        if str(row.get("id", "")).strip() == candidate_id:
-            row["marks"] = marks
-            found = True
-            break
-    if not found:
-        rows.append({"id": candidate_id, "marks": marks})
-    rows.sort(key=lambda x: safe_float(x.get("marks", 0)), reverse=True)
-    try:
-        save_shared_rank_db(rows)
-    except Exception:
-        pass
-    return rows
+    raise RuntimeError("Storage unavailable: configure REDIS_URL or KV_REST_API_URL/KV_REST_API_TOKEN")
 
 
 def get_and_increment_visit_count() -> int | None:
@@ -305,39 +255,16 @@ def get_and_increment_visit_count() -> int | None:
         try:
             return int(redis_client.incr(REDIS_KEY_VISITS))
         except Exception:
-            pass
+            return None
 
     if USE_VERCEL_KV:
         try:
             val = _kv_request("incr", KV_KEY_VISITS)
             return int(val) if val is not None else None
         except Exception:
-            pass
+            return None
 
-    get_req = Request(
-        SHARED_VISIT_DB_URL,
-        headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
-    )
-    try:
-        raw = _download_request(get_req, timeout=12)
-        data = json.loads(raw.decode("utf-8", errors="ignore"))
-        count = int(data.get("count", 0)) if isinstance(data, dict) else 0
-    except Exception:
-        count = 0
-
-    count += 1
-    payload = json.dumps({"count": count}, separators=(",", ":")).encode("utf-8")
-    put_req = Request(
-        SHARED_VISIT_DB_URL,
-        data=payload,
-        method="PUT",
-        headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"},
-    )
-    try:
-        _download_request(put_req, timeout=12)
-        return count
-    except Exception:
-        return None
+    return None
 
 
 def build_csv(report: dict[str, object]) -> str:
