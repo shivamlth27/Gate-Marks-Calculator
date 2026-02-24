@@ -6,12 +6,34 @@ import json
 import os
 import re
 import ssl
+import sys
+from pathlib import Path
 from html import escape
 from urllib.error import URLError
 from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
 from flask import Flask, request
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+
+
+def load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
 
 try:
     import redis
@@ -22,6 +44,9 @@ from gate_da_answer_key import DA_ANSWER_KEY
 from gate_da_marks_calculator import evaluate_exam, parse_response_html_text
 
 app = Flask(__name__)
+load_env_file(PROJECT_ROOT / ".env.local")
+load_env_file(PROJECT_ROOT / ".env")
+
 SHARED_RANK_DB_URL = os.getenv(
     "SHARED_RANK_DB_URL",
     "https://jsonblob.com/api/jsonBlob/019c850d-3527-7e57-aac3-07b96b1e2d18",
@@ -34,6 +59,7 @@ SHARED_VISIT_DB_URL = os.getenv(
 KV_REST_API_URL = os.getenv("KV_REST_API_URL", "").strip().rstrip("/")
 KV_REST_API_TOKEN = os.getenv("KV_REST_API_TOKEN", "").strip()
 USE_VERCEL_KV = bool(KV_REST_API_URL and KV_REST_API_TOKEN)
+TELEGRAM_GROUP_URL = os.getenv("TELEGRAM_GROUP_URL", "").strip()
 
 KV_KEY_RANKS = "gate_da:ranks"
 KV_KEY_VISITS = "gate_da:visits"
@@ -433,6 +459,18 @@ tr.bad td:last-child{{color:var(--bad);font-weight:700}}
 tr.na td:last-child{{color:var(--na);font-weight:700}}
 .theme-toggle{{margin-top:14px;border:1px solid rgba(255,255,255,.58);background:rgba(255,255,255,.16);color:#eaf4ff;border-radius:999px;padding:8px 18px;font:inherit;font-size:12px;cursor:pointer;transition:all .18s ease;box-shadow:none}}
 .theme-toggle:hover{{background:rgba(255,255,255,.24);transform:translateY(-1px);border-color:rgba(255,255,255,.78)}}
+.support-card{{position:relative;overflow:hidden;background:linear-gradient(135deg,rgba(30,64,175,.14),rgba(20,184,166,.12));border:1px solid rgba(56,189,248,.28)}}
+.support-card::after{{content:'';position:absolute;inset:auto -60px -70px auto;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(45,212,191,.18),rgba(45,212,191,0));pointer-events:none}}
+.support-title{{display:flex;align-items:center;gap:10px;margin:0 0 10px;}}.support-copy{{color:var(--muted);font-size:14px;max-width:760px}}.support-actions{{text-align:center;margin-top:12px}}
+.support-cta{{display:inline-flex;align-items:center;gap:8px;margin-top:0;padding:11px 16px;border-radius:999px;border:1px solid rgba(45,212,191,.45);background:linear-gradient(135deg,#0ea5a5,#2563eb);color:#f8fafc !important;font-weight:700;text-decoration:none;box-shadow:0 10px 24px rgba(14,165,233,.32);transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}}
+.support-cta:hover{{transform:translateY(-1px);box-shadow:0 14px 28px rgba(14,165,233,.42);filter:saturate(1.06)}}
+.support-cta .tg-dot{{width:10px;height:10px;border-radius:50%;background:#a7f3d0;box-shadow:0 0 0 3px rgba(167,243,208,.22)}}
+.tg-badge{{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#23a6e0,#2563eb);color:#fff;box-shadow:0 6px 14px rgba(37,99,235,.35)}}
+.tg-icon{{display:inline-flex;align-items:center;justify-content:center}}
+.tg-icon svg{{width:14px;height:14px;fill:currentColor}}
+body.dark .support-card{{background:linear-gradient(140deg,rgba(15,23,42,.88),rgba(15,118,110,.18));border-color:rgba(56,189,248,.30)}}
+body.dark .support-copy{{color:#b6c3d6}}
+@media(max-width:560px){{.support-cta{{width:100%;justify-content:center}}}}
 body.dark{{--ink:#e2e8f0;--muted:#94a3b8;--bg:#0b1220;--panel:#111827;--line:#334155;--good:#34d399;--bad:#fb7185;--na:#94a3b8;--hero-1:#0f172a;--hero-2:#0f5b6e;--hero-3:#1e3a8a;--shadow:0 12px 32px rgba(2,6,23,.42);--shadow-lg:0 18px 48px rgba(2,6,23,.5);background:
 radial-gradient(1100px 420px at -5% -12%,rgba(8,47,73,.70) 0%,transparent 62%),
 radial-gradient(860px 340px at 108% -11%,rgba(30,64,175,.36) 0%,transparent 66%),
@@ -489,7 +527,7 @@ body.dark .insight-stats{{border-color:transparent;background:transparent;color:
 <section class=\"card reveal\"><h2>Summary</h2><div class=\"score\">{score:.2f}</div><div style=\"margin-top:-6px;color:var(--muted);\">out of 100.00</div><div class=\"kpis\"><div class=\"kpi\"><div>GA</div><div class=\"n\">{ga:.2f}</div><div style=\"font-size:12px;color:var(--muted);\">/ 15.00</div></div><div class=\"kpi\"><div>DA</div><div class=\"n\">{da:.2f}</div><div style=\"font-size:12px;color:var(--muted);\">/ 85.00</div></div><div class=\"kpi\"><div>Accuracy</div><div class=\"n\">{(correct / max(1, (correct + wrong)) * 100):.1f}%</div><div style=\"font-size:12px;color:var(--muted);\">attempted only</div></div></div>
 <div class=\"kpis\" style=\"margin-top:8px;\"><div class=\"kpi\"><div>Your Rank</div><div class=\"n\">{current_rank if current_rank is not None else '--'}</div></div></div>
 <div class=\"kpis\" style=\"margin-top:8px;\"><div class=\"kpi\"><div>Correct</div><div class=\"n\">{correct}</div></div><div class=\"kpi\"><div>Wrong</div><div class=\"n\">{wrong}</div></div><div class=\"kpi\"><div>Unanswered</div><div class=\"n\">{unanswered}</div></div></div></section></div>
-<section class=\"card reveal\" style=\"margin-top:18px;\"><h2>Rank Table (Unique Students)</h2><div style=\"color:var(--muted);font-size:12px;\">Ranked by total marks (global, unique by Candidate ID).</div><div class=\"scroll\" style=\"max-height:220px;\"><table id=\"rank-table\"><thead><tr><th>Marks</th><th>Rank</th></tr></thead><tbody>{''.join(rank_html_rows)}</tbody></table></div></section>
+{f'<section class="card reveal support-card" style="margin-top:18px;"><h2 class="support-title"><span class="tg-badge tg-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.5 3.5 2.9 10.7c-1.3.5-1.3 1.2-.2 1.6l4.8 1.5 1.9 6c.2.7.1 1 .9 1 .6 0 .9-.3 1.2-.6l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.8-.8l3.4-16.1c.4-1.2-.4-1.8-1.3-1.1Zm-12 9.7 8.8-5.6c.4-.3.8-.1.4.2l-7.5 6.8-.3 3.3-1.4-4.7Z"/></svg></span><span>Counselling Support</span></h2><div class="support-copy">Join our Telegram group for counselling support, strategy discussion, and latest updates.</div><div class="support-actions"><a href="{escape(TELEGRAM_GROUP_URL)}" target="_blank" rel="noopener noreferrer" class="support-cta"><span class="tg-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.5 3.5 2.9 10.7c-1.3.5-1.3 1.2-.2 1.6l4.8 1.5 1.9 6c.2.7.1 1 .9 1 .6 0 .9-.3 1.2-.6l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.8-.8l3.4-16.1c.4-1.2-.4-1.8-1.3-1.1Zm-12 9.7 8.8-5.6c.4-.3.8-.1.4.2l-7.5 6.8-.3 3.3-1.4-4.7Z"/></svg></span><span>Join @gateda_counselling</span></a></div></section>' if TELEGRAM_GROUP_URL else ''}<section class=\"card reveal\" style=\"margin-top:18px;\"><h2>Rank Table (Unique Students)</h2><div style=\"color:var(--muted);font-size:12px;\">Ranked by total marks (global, unique by Candidate ID).</div><div class=\"scroll\" style=\"max-height:220px;\"><table id=\"rank-table\"><thead><tr><th>Marks</th><th>Rank</th></tr></thead><tbody>{''.join(rank_html_rows)}</tbody></table></div></section>
 <section class=\"card reveal\" style=\"margin-top:18px;\"><h2>Score Insights</h2><div style=\"color:var(--muted);font-size:12px;\">Distribution of submitted marks with trend, median, mean, and P90 indicators.</div><div style=\"margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg, rgba(14,165,165,0.04), rgba(15,118,110,0.02));\"><canvas id=\"insight-chart\" width=\"960\" height=\"320\" style=\"width:100%;height:320px;display:block\"></canvas></div><div class=\"insight-legend\"><span class=\"legend-chip freq\"><span class=\"legend-swatch\" style=\"width:12px;height:12px;border-radius:4px;background:linear-gradient(180deg,#14b8a6,#0f766e);\"></span>Frequency</span><span class=\"legend-chip trend\"><span class=\"legend-swatch line\" style=\"width:16px;height:3px;border-radius:999px;background:#2dd4bf;\"></span>Trend</span><span class=\"legend-chip p50\"><span class=\"legend-swatch dash\" style=\"width:2px;height:13px;border-radius:999px;background:#f59e0b;\"></span>Median (P50)</span><span class=\"legend-chip mean\"><span class=\"legend-swatch dash\" style=\"width:2px;height:13px;border-radius:999px;background:#2563eb;\"></span>Mean</span><span class=\"legend-chip p90\"><span class=\"legend-swatch dash\" style=\"width:2px;height:13px;border-radius:999px;background:#ef4444;\"></span>P90</span></div><div id=\"insight-summary\" class=\"insight-stats\"></div></section>
 <section class=\"card reveal\" style=\"margin-top:18px;\"><h2>Question-wise Report</h2><div class=\"tools\"><button class=\"pill\" onclick=\"filterRows('ALL')\">All</button><button class=\"pill\" onclick=\"filterRows('GA')\">GA</button><button class=\"pill\" onclick=\"filterRows('DA')\">DA</button><button class=\"pill\" onclick=\"statusRows('CORRECT')\">Correct</button><button class=\"pill\" onclick=\"statusRows('WRONG')\">Wrong</button><button class=\"pill\" onclick=\"statusRows('UNANSWERED')\">Unanswered</button><button class=\"pill\" onclick=\"resetRows()\">Reset</button><button class=\"pill\" onclick=\"downloadCsv()\">Download CSV</button></div>
 <div class=\"scroll\"><table id=\"report-table\"><thead><tr><th>Q#</th><th>Section</th><th>Type</th><th>Max</th><th>Your Ans</th><th>Key</th><th>Earned</th><th>Status</th></tr></thead><tbody>{''.join(rows)}</tbody></table></div>
@@ -544,3 +582,6 @@ def evaluate() -> str:
             rank_rows=load_shared_rank_db(),
             current_rank=None,
         )
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5000, debug=True)
