@@ -390,8 +390,9 @@ def render_page(
     rank_marks_json = escape(json.dumps(rank_marks))
 
     return f"""<!doctype html>
-<html lang=\"en\"><head><meta charset=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>
+<html lang=\"en\"><head><meta charset=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/><meta name=\"color-scheme\" content=\"dark light\"/>
 <title>GATE DA 2026 Report</title>
+<style>html,body{{background:#0b1220;}}</style>
 <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>
 <link href=\"https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Libre+Baskerville:wght@400;700&display=swap\" rel=\"stylesheet\">
 <style>
@@ -497,7 +498,7 @@ body.dark .legend-chip.p90{{border-color:#9b3b3b}}
 body.dark .insight-stats{{border-color:transparent;background:transparent;color:#d1deef;box-shadow:none;padding:0;margin-top:12px}}
 @media(max-width:920px){{.grid{{grid-template-columns:1fr}}.kpis{{grid-template-columns:1fr 1fr}}.wrap{{padding:20px 14px 24px}}.hero{{padding:22px}}}}
 @media(max-width:560px){{.kpis{{grid-template-columns:1fr}}.btn{{width:100%}}.row{{grid-template-columns:1fr}}}}
-</style></head><body><div class=\"wrap\"><section class=\"hero\"><h1>GATE DA 2026 Report</h1><div class=\"tag\">Paste response-sheet link and get full question-wise report instantly.</div><button id=\"theme-toggle\" class=\"theme-toggle\" type=\"button\">Dark Mode</button></section>
+</style></head><body class=\"dark\"><div class=\"wrap\"><section class=\"hero\"><h1>GATE DA 2026 Report</h1><div class=\"tag\">Paste response-sheet link and get full question-wise report instantly.</div><button id=\"theme-toggle\" class=\"theme-toggle\" type=\"button\">Dark Mode</button></section>
 <div class=\"grid\"><section class=\"card reveal\"><h2>Input</h2><form method=\"post\"><label>Response Sheet URL</label><input id=\"response-url\" type=\"text\" name=\"response_url\" placeholder=\"https://cdn.digialm.com/.../DA...html\" value=\"{escape(response_url)}\"/><div class=\"row\" style=\"margin-top:10px;\"><div></div><div class=\"cta-group\"><button class=\"btn\" type=\"submit\">Generate Report</button></div></div></form>{f'<div class="msg err">{escape(error)}</div>' if error else ''}</section>
 <section class=\"card reveal\"><h2>Summary</h2><div class=\"score\">{score:.2f}</div><div style=\"margin-top:-6px;color:var(--muted);\">out of 100.00</div><div class=\"kpis\"><div class=\"kpi\"><div>GA</div><div class=\"n\">{ga:.2f}</div><div style=\"font-size:12px;color:var(--muted);\">/ 15.00</div></div><div class=\"kpi\"><div>DA</div><div class=\"n\">{da:.2f}</div><div style=\"font-size:12px;color:var(--muted);\">/ 85.00</div></div><div class=\"kpi\"><div>Accuracy</div><div class=\"n\">{(correct / max(1, (correct + wrong)) * 100):.1f}%</div><div style=\"font-size:12px;color:var(--muted);\">attempted only</div></div></div>
 <div class=\"kpis\" style=\"margin-top:8px;\"><div class=\"kpi\"><div>Your Rank</div><div class=\"n\">{current_rank if current_rank is not None else '--'}</div></div></div>
